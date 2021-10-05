@@ -1,0 +1,135 @@
+#python:
+from gprMax.input_cmd_funcs import *
+from user_libs.antennas.GSSI import antenna_like_GSSI_400
+import numpy as np
+from scipy import interpolate as it
+
+# file_name = inputfile.split('\\')[-1]   #xx_x-x.in
+# parameters = file_name.split('-')[-1]
+# run_num = int(parameters.split('.')[0])-1
+
+command('title', 'Pipeline')
+x_dim = 2.5
+y_dim = 0.35
+z_dim = 0.8
+cylinder_d = 5e-2
+cylinder_thick = 0.5e-2
+cylinder_depth = 32e-2
+air_layer = 30e-2
+rough_down_bound = 1.5e-2
+rough_up_bound = 0.5e-2
+water_high = 0e-2
+
+last_layer_name = 'damp_sand'
+
+resolution = 0.002
+tsim = 15e-9
+B_scan = True
+
+domain = domain(x=x_dim, y=y_dim, z=z_dim)
+dx = dx_dy_dz(resolution, resolution, resolution)
+time_window(tsim)
+
+material(permittivity=8, conductivity=0.01,
+         permeability=1, magconductivity=0, name=last_layer_name)
+material(permittivity=5, conductivity=0,
+         permeability=1, magconductivity=0, name='asphalt')
+material(permittivity=7, conductivity=0,
+         permeability=1, magconductivity=0, name='cement')
+material(permittivity=3.1, conductivity=2.3e7,
+         permeability=1, magconductivity=0, name='metallic')
+material(permittivity=3, conductivity=0.01,
+         permeability=1, magconductivity=0, name='plastic')
+material(permittivity=5, conductivity=0.05,
+         permeability=1, magconductivity=0, name='concrete')
+         
+'''identifier = waveform('ricker', amplitude=1, frequency=1.5e9,
+                      identifier='my_ricker')'''
+
+if B_scan:
+    x_ant = 25e-2
+else:
+    x_ant = domain.x/2 # in the middle of the x-axis
+
+'''tx = hertzian_dipole('z',
+                     x_ant, domain.y - 4e-2, 0, # minus 4 cm in y-direction
+                     identifier)
+rx(tx.x + 2e-2, tx.y, tx.z)     # 2 cm away in x-direction from tx
+'''
+
+antenna_like_GSSI_400(x_ant + current_model_run * 2*1e-2, domain.y/2,domain.z - air_layer+10e-2, 0.002,rotate90=False)
+
+
+'''if B_scan:
+    src_steps(dx=0.8e-2/4)
+    rx_steps(dx=0.8e-2/4)'''
+asp = 15e-2
+cem = 15e-2
+random_seed = 1
+
+# command('fractal_box',0, 0, 0, domain.x, domain.y, domain.z-air_layer, 
+#         1.5, 1, 1, 1, 1, 'asphalt', 'asphalt_layer', random_seed)
+# command('add_surface_roughness', 0, 0, domain.z-air_layer,
+#         domain.x, domain.y, domain.z-air_layer, 1.5, 1, 1, 
+#         domain.z-air_layer-rough_down_bound, domain.z-air_layer+rough_up_bound, 'asphalt_layer', random_seed)
+# command('add_surface_water',0,0, domain.z -air_layer,
+#         domain.x, domain.y, domain.z-air_layer,
+#         domain.z -air_layer+ water_high, 'asphalt_layer')
+
+a0, a1 = box(0, 0, 0,domain.x, domain.y, z_dim- 30e-2,'asphalt')
+c0, c1 = box(0, 0, 0,domain.x, domain.y, z_dim- air_layer-asp,'cement')
+s0, s1 = box(0, 0, 0,domain.x, domain.y, z_dim- air_layer-asp-cem,last_layer_name)
+
+
+#c_x, c_z = (a1.x/2, a1.z/2) # in the middle of the x-axis and 5 cm down from the half_space
+c_x = domain.x/2
+
+
+np.random.seed(2)
+surfCe=np.random.rand(11)
+np.random.seed(9)
+surfSo=np.random.rand(11)
+
+x=[0,50,100,150,200,250,300,350,400,450,500]
+
+splCe = it.splrep(x,surfCe)
+splSo = it.splrep(x,surfSo)
+
+surfCe = np.linspace(0,500,501)
+surfSo = np.linspace(0,500,501)
+
+yCe=it.splev(surfCe,splCe)
+ySo=it.splev(surfSo,splSo)
+
+for i in range(0,501):
+  cylinder(i*1e-2 , 0 , c1.z+ yCe[i]*3e-2, i*1e-2 , y_dim , c1.z+ yCe[i]*3e-2,radius=3e-2, material='cement')
+  #cylinder(domain.x/2-i , domain.y - 135 + y1[i]*d + 5 - 1, 0,domain.x/2-i, domain.y - 135 + y1[i]*d + 5 - 1, z_dim,radius=1.5, material='soi')
+for i in range(0,500):
+  cylinder(i*1e-2 , 0 , s1.z+ ySo[i]*3e-2, i*1e-2 , y_dim , s1.z+ ySo[i]*3e-2,radius=3e-2, material=last_layer_name)
+  #cylinder(domain.x/2-i , domain.y - 135 + y1[i]*d + 5 - 1, 0,domain.x/2-i, domain.y - 135 + y1[i]*d + 5 - 1, z_dim,radius=1.5, material='soi')
+
+h = cylinder_depth + cylinder_d/2
+# outer cylinder
+# cylinder(c_x, 0, z_dim-air_layer-h,
+#          c_x, y_dim, z_dim-air_layer-h,
+#          radius=cylinder_d/2, material='pec')
+
+# # inner cylinder
+# cylinder(c_x, 0, z_dim-air_layer-h,
+#          c_x, y_dim, z_dim-air_layer-h,
+#          radius=cylinder_d/2-cylinder_thick, material='free_space')
+
+# Outputs, geometry and snapshots
+'''
+geometry_view(0, 0, 0,
+              domain.x, domain.y, domain.z,
+              dx.x, dx.y, dx.z,
+              'cylinder', 'n')'''
+'''
+N = 32
+for i in range(1, N+1):
+    snapshot(0, 0, 0,
+             domain.x, domain.y, domain.z,
+             dx.x, dx.y, dx.z, i*(tsim/N), 'snapshot' + str(i))'''
+#geometry_view( 0, 0, 0, x_dim, y_dim, z_dim, 5*resolution, 5*resolution, 5*resolution, '400M_'+last_layer_name+'_5d')
+#end_python:
