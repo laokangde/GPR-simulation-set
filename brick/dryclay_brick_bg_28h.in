@@ -1,0 +1,215 @@
+#python:
+from gprMax.input_cmd_funcs import *
+from user_libs.antennas.GSSI import antenna_like_GSSI_400
+import numpy as np
+from scipy import interpolate as it
+
+# 解决可能的Linux和windows返回的路径不一样的问题
+file_name = inputfile.split('\\')
+if len(file_name) == 1: #说明没有\\
+    file_name = inputfile.split('/')
+file_name = file_name[-1]   #dampsand_brick_con_28h.in
+parameters = file_name.split('_') #dampsand brick con 28h.in
+
+last_layer_name = parameters[0] #dampsand 
+scenario = parameters[1] #brick
+target_type = parameters[2] #con
+target_depth = parameters[-1].split('.')[0] #28h
+
+target_depth = int(target_depth[:-1])
+
+
+
+command('title', 'Pipeline')
+x_dim = 2.5
+y_dim = 0.35
+z_dim = 0.8
+cylinder_d = 5e-2
+cylinder_thick = 0.5e-2
+cylinder_depth = target_depth * 1e-2
+air_layer = 30e-2
+
+
+
+
+resolution = 0.002
+tsim = 15e-9
+B_scan = True
+
+domain = domain(x=x_dim, y=y_dim, z=z_dim)
+dx = dx_dy_dz(resolution, resolution, resolution)
+time_window(tsim)
+
+material(permittivity=8, conductivity=0.01,
+         permeability=1, magconductivity=0, name='dampsand')
+
+material(permittivity=20, conductivity=0.1,
+         permeability=1, magconductivity=0, name='wetsand')
+
+material(permittivity=3, conductivity=0.001,
+         permeability=1, magconductivity=0, name='drysand')
+
+material(permittivity=12, conductivity=0.01,
+         permeability=1, magconductivity=0, name='wetclay')
+
+material(permittivity=10, conductivity=0.01,
+         permeability=1, magconductivity=0, name='dryclay')
+
+material(permittivity=10, conductivity=0.001,
+         permeability=1, magconductivity=0, name='dryloam')
+
+material(permittivity=5, conductivity=0,
+         permeability=1, magconductivity=0, name='asphalt')
+
+material(permittivity=7, conductivity=0,
+         permeability=1, magconductivity=0, name='cement')
+
+material(permittivity=3.1, conductivity=2.3e7,
+         permeability=1, magconductivity=0, name='metallic')
+
+material(permittivity=3, conductivity=0.01,
+         permeability=1, magconductivity=0, name='plastic')
+
+material(permittivity=5, conductivity=0.05,
+         permeability=1, magconductivity=0, name='con')
+
+         
+'''identifier = waveform('ricker', amplitude=1, frequency=1.5e9,
+                      identifier='my_ricker')'''
+
+if B_scan:
+    x_ant = 25e-2
+else:
+    x_ant = domain.x/2 # in the middle of the x-axis
+
+'''tx = hertzian_dipole('z',
+                     x_ant, domain.y - 4e-2, 0, # minus 4 cm in y-direction
+                     identifier)
+rx(tx.x + 2e-2, tx.y, tx.z)     # 2 cm away in x-direction from tx
+'''
+
+antenna_like_GSSI_400(x_ant + current_model_run * 2*1e-2, domain.y/2,domain.z - air_layer+10e-2, 0.002,rotate90=False)
+
+
+'''if B_scan:
+    src_steps(dx=0.8e-2/4)
+    rx_steps(dx=0.8e-2/4)'''
+asp = 15e-2
+cem = 15e-2
+random_seed = 2
+
+# command('fractal_box',0, 0, 0, domain.x, domain.y, domain.z-air_layer, 
+#         1.5, 1, 1, 1, 1, 'asphalt', 'asphalt_layer', random_seed)
+# command('add_surface_roughness', 0, 0, domain.z-air_layer,
+#         domain.x, domain.y, domain.z-air_layer, 1.5, 1, 1, 
+#         domain.z-air_layer-rough_down_bound, domain.z-air_layer+rough_up_bound, 'asphalt_layer', random_seed)
+# command('add_surface_water',0,0, domain.z -air_layer,
+#         domain.x, domain.y, domain.z-air_layer,
+#         domain.z -air_layer+ water_high, 'asphalt_layer')
+# command('add_grass', 0, 0, domain.z-air_layer,
+#         domain.x, domain.y, domain.z-air_layer,
+#         1.5, domain.z-air_layer+root_depth, domain.z-air_layer+root_depth+blade_high, 
+#         grass_num, 'asphalt_layer',random_seed)
+
+a0, a1 = box(0, 0, 0,domain.x, domain.y, z_dim- air_layer,'asphalt')
+c0, c1 = box(0, 0, 0,domain.x, domain.y, z_dim- air_layer-asp,'cement')
+s0, s1 = box(0, 0, 0,domain.x, domain.y, z_dim- air_layer-asp-cem,last_layer_name)
+
+
+#c_x, c_z = (a1.x/2, a1.z/2) # in the middle of the x-axis and 5 cm down from the half_space
+c_x = domain.x/2
+
+
+np.random.seed(6)
+surfCe=np.random.rand(11)
+np.random.seed(13)
+surfSo=np.random.rand(11)
+
+x=[0,50,100,150,200,250,300,350,400,450,500]
+
+splCe = it.splrep(x,surfCe)
+splSo = it.splrep(x,surfSo)
+
+surfCe = np.linspace(0,500,501)
+surfSo = np.linspace(0,500,501)
+
+yCe=it.splev(surfCe,splCe)
+ySo=it.splev(surfSo,splSo)
+
+#----------------------#---------------------------#
+brick_num=21           #X brick number
+brick_num2=9          #Y brick number
+brick_num3=1          #Z brick number/2
+
+brick_length=0.225
+brick_width=0.105
+brick_height=0.05
+
+concrete_width=0.01
+
+x_wall = 0.002
+y_wall = domain.z-air_layer- brick_height #实际是z
+z_wall = 0.01#实际是y
+
+brick_dif=(brick_width-concrete_width)/2
+brick_difbig=brick_length-brick_dif-concrete_width
+
+material( 4.5, 0.04, 1, 0, 'my_brick')
+material( 6, 0.01, 1, 0, 'my_concrete')
+
+box(x_wall,z_wall-concrete_width,y_wall,
+    x_wall+brick_num*brick_width+(brick_num-1)*concrete_width,z_wall+brick_length+brick_width+concrete_width,y_wall+brick_num3*brick_height+(brick_num3-1)*concrete_width,
+    material='my_concrete')
+
+for k in range (0,brick_num3):
+  for i in range(0,brick_num): 
+    box(x_wall+(brick_width+concrete_width)*i , z_wall, y_wall+(brick_height+concrete_width)*2*k , 
+        x_wall+brick_width+(brick_width+concrete_width)*i ,  z_wall+brick_length,y_wall+(brick_height+concrete_width)*2*k+brick_height ,
+        material='my_brick')
+  box(x_wall,z_wall+brick_length+concrete_width,y_wall+(brick_height+concrete_width)*2*k,
+      x_wall+brick_difbig,z_wall+brick_length+concrete_width+brick_width,y_wall+(brick_height+concrete_width)*2*k+brick_height,
+      material='my_brick')
+  for ii in range(0,brick_num2): 
+    box(x_wall+brick_difbig+concrete_width+(brick_length+concrete_width)*ii,z_wall+brick_length+concrete_width,y_wall+(brick_height+concrete_width)*2*k,
+        x_wall+brick_difbig+concrete_width+brick_length+(brick_length+concrete_width)*ii,  z_wall+brick_length+concrete_width+brick_width,y_wall+(brick_height+concrete_width)*2*k+brick_height ,
+        material='my_brick')
+  box(x_wall+(brick_num2+1)*concrete_width+brick_num2*brick_length+brick_difbig,z_wall+brick_length+concrete_width,y_wall+(brick_height+concrete_width)*2*k,
+      x_wall+(brick_num2+1)*concrete_width+brick_num2*brick_length+brick_difbig+brick_dif,z_wall+brick_length+concrete_width+brick_width,y_wall+(brick_height+concrete_width)*2*k+brick_height,
+      material='my_brick')
+
+
+#----------------------#管线-----------------------#
+for i in range(0,501):
+  cylinder(i*1e-2 , 0 , c1.z+ yCe[i]*3e-2, i*1e-2 , y_dim , c1.z+ yCe[i]*3e-2,radius=3e-2, material='cement')
+  #cylinder(domain.x/2-i , domain.y - 135 + y1[i]*d + 5 - 1, 0,domain.x/2-i, domain.y - 135 + y1[i]*d + 5 - 1, z_dim,radius=1.5, material='soi')
+for i in range(0,500):
+  cylinder(i*1e-2 , 0 , s1.z+ ySo[i]*3e-2, i*1e-2 , y_dim , s1.z+ ySo[i]*3e-2,radius=3e-2, material=last_layer_name)
+  #cylinder(domain.x/2-i , domain.y - 135 + y1[i]*d + 5 - 1, 0,domain.x/2-i, domain.y - 135 + y1[i]*d + 5 - 1, z_dim,radius=1.5, material='soi')
+
+h = cylinder_depth + cylinder_d/2
+
+if target_type != 'bg':
+# outer cylinder
+    cylinder(c_x, 0, z_dim-air_layer-h,
+             c_x, y_dim, z_dim-air_layer-h,
+             radius=cylinder_d/2, material=target_type)
+    
+    # inner cylinder
+    cylinder(c_x, 0, z_dim-air_layer-h,
+             c_x, y_dim, z_dim-air_layer-h,
+             radius=cylinder_d/2-cylinder_thick, material='free_space')
+
+# Outputs, geometry and snapshots
+'''
+geometry_view(0, 0, 0,
+              domain.x, domain.y, domain.z,
+              dx.x, dx.y, dx.z,
+              'cylinder', 'n')'''
+'''
+N = 32
+for i in range(1, N+1):
+    snapshot(0, 0, 0,
+             domain.x, domain.y, domain.z,
+             dx.x, dx.y, dx.z, i*(tsim/N), 'snapshot' + str(i))'''
+# geometry_view( 0, 0, 0, x_dim, y_dim, z_dim, 5*resolution, 5*resolution, 5*resolution, '400M_'+last_layer_name+'_5d')
+#end_python:
